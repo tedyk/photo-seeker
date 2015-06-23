@@ -8,9 +8,8 @@ import android.app.ProgressDialog;
 import android.content.Context;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Handler;
-import android.support.v7.app.ActionBarActivity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
@@ -26,50 +25,51 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.android.imagehandler.ImageCache.ImageCacheParams;
-import com.android.imagehandler.ImageFetcher;
+import com.squareup.picasso.Picasso;
 
 import org.tedka.photoseeker.R;
 import org.tedka.photoseeker.channel.base.ChannelController;
 import org.tedka.photoseeker.channel.flickr.FlickrController;
 import org.tedka.photoseeker.channel.flickr.FlickrModel;
-import org.tedka.photoseeker.util.Constants;
 import org.tedka.photoseeker.util.Network;
 
 import java.util.ArrayList;
 
+import roboguice.activity.RoboActionBarActivity;
+import roboguice.inject.ContentView;
+import roboguice.inject.InjectResource;
+import roboguice.inject.InjectView;
+
 /**
  * MainActivity of the Application
  */
-public class MainActivity extends ActionBarActivity {
+@ContentView(R.layout.activity_main)
+public class MainActivity extends RoboActionBarActivity {
 
-    private int imageThumbSize;
-    private int imageThumbSpacing;
-    private ImageFetcher imageFetcher;
+    @InjectView(R.id.tvNoAlbums)        TextView txtNoAlbums;
+    @InjectView(R.id.progress)          ProgressBar progressLoadMore;
+    @InjectView(R.id.photoGrid)         GridView albumGrid;
+    @InjectView(R.id.searchText)        EditText txtSearch;
+    @InjectView(R.id.full_image_box)    View expandedImageContainer;
+    @InjectView(R.id.full_image)        ImageView expandedImageView;
+    @InjectView(R.id.full_image_title)  TextView expandedImageTitle;
+    @InjectView(R.id.info)              TextView expandedImagePrompt;
+
+    @InjectResource(android.R.integer.config_shortAnimTime) int animationDuration;
+
+    private ImageAdapter imageAdapter;
+    private ProgressDialog progressDialog;
 
     public static int currentPage = 1;
     private int lastItem = 0;
     private boolean endOfResultsDisplay = false;
 
-    private TextView txtNoAlbums;
-    private ProgressBar progressLoadMore;
-
-    private GridView albumGrid;
-    private ImageAdapter imageAdapter;
     private ChannelController channelController;
-    private ProgressDialog progressDialog;
-    private EditText txtSearch;
-
-    private Handler myHandler = new Handler();
-    private Runnable updateRunnable;
-
     private Animator animator;
-    private int animationDuration;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
 
         // Initialize the UI elements, setup progressbars etc.
         initUIElements();
@@ -85,27 +85,17 @@ public class MainActivity extends ActionBarActivity {
      * Initialize all the UI elements
      */
     private void initUIElements() {
-        txtSearch = (EditText) findViewById(R.id.searchText);
-        albumGrid = (GridView) findViewById(R.id.photoGrid);
-        txtNoAlbums = (TextView) findViewById(R.id.tvNoAlbums);
-        progressLoadMore = (ProgressBar) findViewById(R.id.progress);
         progressLoadMore.setVisibility(View.GONE);
-        imageThumbSize = getResources().getDimensionPixelSize(R.dimen.photo_thumbnail_size);
-        imageThumbSpacing = getResources().getDimensionPixelSize(R.dimen.photo_thumbnail_spacing);
-
-        animationDuration = getResources().getInteger(android.R.integer.config_shortAnimTime);
 
         progressDialog = new ProgressDialog(this);
         progressDialog.setMessage("Fetching images, please wait...");
         progressDialog.setCancelable(false);
+
         txtSearch.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                    channelController.getImageFeed().clear();
-                    currentPage = 1;
-                    hideSoftKeyboard();
-                    fetchAndShowImages(txtSearch.getText().toString().trim());
+                    startNewSearch();
                     return true;
                 }
                 return false;
@@ -117,15 +107,14 @@ public class MainActivity extends ActionBarActivity {
      * Initialize all the Image Handling items - cache, grid, adapter etc.
      */
     private void initImageHandling() {
-        // ImageFetcher loads images into ImageView children asynchronously
-        ImageCacheParams cacheParams = new ImageCacheParams(this, Constants.IMAGE_CACHE_DIR);
-        imageFetcher = new ImageFetcher(this, imageThumbSize);
-        imageFetcher.setLoadingImage(R.drawable.thumbnail_placeholder);
-        imageFetcher.addImageCache(this.getSupportFragmentManager(), cacheParams);
 
-        imageAdapter = new ImageAdapter(this, channelController, imageFetcher);
+        imageAdapter = new ImageAdapter(this, channelController);
         albumGrid.setAdapter(imageAdapter);
         albumGrid.setFastScrollEnabled(true);
+
+        final int imageThumbSize = getResources().getDimensionPixelSize(R.dimen.photo_thumbnail_size);
+        final int imageThumbSpacing = getResources().getDimensionPixelSize(R.dimen.photo_thumbnail_spacing);
+
 
         // Determine final width of the GridView and calculate number of columns and its width.
         albumGrid.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
@@ -155,12 +144,10 @@ public class MainActivity extends ActionBarActivity {
         albumGrid.setOnScrollListener(new AbsListView.OnScrollListener() {
             @Override
             public void onScrollStateChanged(AbsListView absListView, int scrollState) {
-                // Pause fetcher to ensure smoother scrolling when flinging
-                if (scrollState == AbsListView.OnScrollListener.SCROLL_STATE_FLING) {
-                    imageFetcher.setPauseWork(true);
-                } else {
-                    imageFetcher.setPauseWork(false);
-                }
+                /**************************************************************************
+                 * Pausing of image download (to ensure smoother scrolling) when flinging
+                 * is implicitly taken care in Picasso, so no custom handling required here
+                 **************************************************************************/
             }
 
             @Override
@@ -186,6 +173,10 @@ public class MainActivity extends ActionBarActivity {
      * @param view
      */
     public void fireSearch(View view) {
+        startNewSearch();
+    }
+
+    private void startNewSearch() {
         channelController.getImageFeed().clear();
         currentPage = 1;
         hideSoftKeyboard();
@@ -204,7 +195,6 @@ public class MainActivity extends ActionBarActivity {
             channelController.getImageFeed().clear();
             endOfResultsDisplay = false;
             lastItem = 0;
-            // get new photos
             progressDialog.show();
         } else {
             progressLoadMore.setVisibility(View.VISIBLE);
@@ -212,9 +202,9 @@ public class MainActivity extends ActionBarActivity {
 
         if (Network.isNetworkAvailable(MainActivity.this)) {
 
-            new Thread(new Runnable() {
+            new AsyncTask<Void, Void, Void>() {
                 @Override
-                public void run() {
+                protected Void doInBackground(Void... voids) {
                     ArrayList<FlickrModel> photoResults;
                     // get the photo search results
                     photoResults = FlickrController.getPhotos(tag, currentPage);
@@ -224,14 +214,11 @@ public class MainActivity extends ActionBarActivity {
                         endOfResultsDisplay = true;
 
                     currentPage++;
-
-                    myHandler.post(updateRunnable);
+                    return null;
                 }
-            }).start();
-            updateRunnable = new Runnable() {
-                @Override
-                public void run() {
 
+                @Override
+                protected void onPostExecute(Void aVoid) {
                     if (channelController.getImageFeed().size() > 0) {
                         imageAdapter.notifyDataSetChanged();
                         // Obtain current position to maintain scroll position
@@ -245,7 +232,7 @@ public class MainActivity extends ActionBarActivity {
                     progressDialog.dismiss();
                     progressLoadMore.setVisibility(View.GONE);
                 }
-            };
+            }.execute();
         } else {
             Toast.makeText(this, R.string.no_internet, Toast.LENGTH_SHORT).show();
             progressDialog.dismiss();
@@ -268,13 +255,11 @@ public class MainActivity extends ActionBarActivity {
             animator.cancel();
         }
 
-        // Load the high-resolution image.
-        final View expandedImageContainer = findViewById(R.id.expanded_image_container);
-        final ImageView expandedImageView = (ImageView) findViewById(R.id.expanded_image);
-        final TextView expandedImageTitle = (TextView) findViewById(R.id.expanded_image_title);
-        final TextView expandedImagePrompt = (TextView) findViewById(R.id.info);
-
-        imageFetcher.loadImage(channelController.getPhotoUrl(pos), expandedImageView);
+        Picasso.with(this)
+                .load(channelController.getPhotoUrl(pos))
+                .placeholder(R.drawable.thumbnail_placeholder)
+                .error(R.drawable.thumbnail_placeholder)
+                .into(expandedImageView);
         expandedImageTitle.setText(channelController.getImageFeed().get(pos).getTitle());
 
         // Calculate the starting and ending bounds for the zoomed-in image.

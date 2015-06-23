@@ -7,8 +7,9 @@ import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 
-import com.android.imagehandler.ImageFetcher;
+import com.squareup.picasso.Picasso;
 
 import org.tedka.photoseeker.R;
 import org.tedka.photoseeker.channel.base.ChannelController;
@@ -21,7 +22,6 @@ public class ImageAdapter extends BaseAdapter {
     private LayoutInflater mInflater;
     private RelativeLayout.LayoutParams mImageViewLayoutParams;
     private ChannelController channelController;
-    private ImageFetcher imageFetcher;
     private int mItemHeight = 0;
     private int mNumColumns = 0;
 
@@ -31,11 +31,9 @@ public class ImageAdapter extends BaseAdapter {
      *
      * @param mainActivity
      * @param _c
-     * @param _fetcher
      */
-    public ImageAdapter(MainActivity mainActivity, ChannelController _c, ImageFetcher _fetcher) {
+    public ImageAdapter(MainActivity mainActivity, ChannelController _c) {
         this.channelController = _c;
-        this.imageFetcher = _fetcher;
         mInflater = (LayoutInflater) mainActivity.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         mImageViewLayoutParams = new RelativeLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -113,18 +111,18 @@ public class ImageAdapter extends BaseAdapter {
      * @return
      */
     public View getView(final int position, View view, ViewGroup parent) {
-
         ViewHolder holder;
 
         if (view == null) {
             holder = new ViewHolder();
             view = mInflater.inflate(R.layout.thumbnail, null);
             holder.thumbnail = (ImageView) view.findViewById(R.id.thumbnail);
-            //holder.title = (TextView) view.findViewById(R.id.title);
+            holder.title = (TextView) view.findViewById(R.id.title);
 
             view.setTag(holder);
-        } else
+        } else {
             holder = (ViewHolder) view.getTag();
+        }
 
         holder.thumbnail.setLayoutParams(mImageViewLayoutParams);
 
@@ -134,9 +132,13 @@ public class ImageAdapter extends BaseAdapter {
         }
 
         ChannelModel photo = getItem(position);
-        imageFetcher.loadImage(channelController.getPhotoUrl(position), holder.thumbnail);
+        Picasso.with(parent.getContext())
+                .load(channelController.getPhotoUrl(position))
+                .placeholder(R.drawable.thumbnail_placeholder)
+                .error(R.drawable.thumbnail_placeholder)
+                .into(holder.thumbnail);
         holder.thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        //holder.title.setText(photo.getTitle());
+        holder.title.setText(photo.getTitle());
 
         return view;
     }
@@ -147,7 +149,6 @@ public class ImageAdapter extends BaseAdapter {
      */
     class ViewHolder {
         ImageView thumbnail;
-        //TextView title;
+        TextView title;
     }
-
 }

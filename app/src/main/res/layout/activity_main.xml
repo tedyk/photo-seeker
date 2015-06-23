@@ -68,7 +68,7 @@
         android:visibility="gone" />
 
     <LinearLayout
-        android:id="@+id/expanded_image_container"
+        android:id="@+id/full_image_box"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_alignParentTop="true"
@@ -79,14 +79,14 @@
         android:visibility="invisible">
 
         <ImageView
-            android:id="@+id/expanded_image"
+            android:id="@+id/full_image"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:contentDescription="@string/app_name"/>
 
     </LinearLayout>
     <TextView
-        android:id="@+id/expanded_image_title"
+        android:id="@+id/full_image_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:padding="5dp"

@@ -7,7 +7,21 @@
     <ImageView
         android:id="@+id/thumbnail"
         android:layout_width="148dp"
-        android:layout_height="148dp"
-        android:src="@drawable/thumbnail_placeholder" />
+        android:layout_height="148dp" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignBottom="@+id/thumbnail"
+        android:background="#70000000"
+        android:padding="6dp" >
+
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/white" />
+    </LinearLayout>
 </RelativeLayout>
